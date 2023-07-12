@@ -16,12 +16,16 @@ import torch
 from transformers import AutoTokenizer, AutoModelForQuestionAnswering, pipeline
 
 
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
 qa_tokenizer = AutoTokenizer.from_pretrained("ktrapeznikov/albert-xlarge-v2-squad-v2")
-qa_model = AutoModelForQuestionAnswering.from_pretrained("ktrapeznikov/albert-xlarge-v2-squad-v2")
+qa_model = AutoModelForQuestionAnswering.from_pretrained("ktrapeznikov/albert-xlarge-v2-squad-v2").to(device)
 
 
 def get_answer(question, text):  # Code taken from https://huggingface.co/transformers/task_summary.html
-    inputs = qa_tokenizer.encode_plus(question, text, add_special_tokens=True, return_tensors="pt")
+    inputs = qa_tokenizer.encode_plus(question, text, add_special_tokens=True, return_tensors="pt").to(device)
     input_ids = inputs["input_ids"].tolist()[0]
 
     text_tokens = qa_tokenizer.convert_ids_to_tokens(input_ids)

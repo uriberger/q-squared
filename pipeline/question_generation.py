@@ -18,8 +18,12 @@ from transformers import AutoModelWithLMHead, AutoTokenizer, AutoModelForQuestio
 import spacy
 
 
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
 qg_tokenizer = AutoTokenizer.from_pretrained("mrm8488/t5-base-finetuned-question-generation-ap")
-qg_model = AutoModelWithLMHead.from_pretrained("mrm8488/t5-base-finetuned-question-generation-ap")
+qg_model = AutoModelWithLMHead.from_pretrained("mrm8488/t5-base-finetuned-question-generation-ap").to(device)
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -51,7 +55,7 @@ def get_answer_candidates(text):
 
 def get_question_greedy(answer, context, max_length=128):
     input_text = "answer: %s  context: %s </s>" % (answer, context)
-    features = qg_tokenizer([input_text], return_tensors='pt')
+    features = qg_tokenizer([input_text], return_tensors='pt').to(device)
 
     output = qg_model.generate(input_ids=features['input_ids'], attention_mask=features['attention_mask'],
                                max_length=max_length)
@@ -63,7 +67,7 @@ def get_question_greedy(answer, context, max_length=128):
 def get_questions_beam(answer, context, max_length=128, beam_size=5, num_return=5):
     all_questions = []
     input_text = "answer: %s  context: %s </s>" % (answer, context)
-    features = qg_tokenizer([input_text], return_tensors='pt')
+    features = qg_tokenizer([input_text], return_tensors='pt').to(device)
 
     beam_outputs = qg_model.generate(input_ids=features['input_ids'], attention_mask=features['attention_mask'],
                                      max_length=max_length, num_beams=beam_size, no_repeat_ngram_size=3,
@@ -78,7 +82,7 @@ def get_questions_beam(answer, context, max_length=128, beam_size=5, num_return=
 def get_questions_sample(answer, context, max_length=128, top_k=50, top_p=0.95, num_return=5):
     all_questions = []
     input_text = "answer: %s  context: %s </s>" % (answer, context)
-    features = qg_tokenizer([input_text], return_tensors='pt')
+    features = qg_tokenizer([input_text], return_tensors='pt').to(device)
 
     sampled_outputs = qg_model.generate(input_ids=features['input_ids'], attention_mask=features['attention_mask'],
                                         max_length=max_length, do_sample=True, top_k=top_k, top_p=top_p,
