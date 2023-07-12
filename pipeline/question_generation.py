@@ -79,19 +79,28 @@ def get_questions_beam(answer, context, max_length=128, beam_size=5, num_return=
     return all_questions
 
 def get_questions_beam_batch(answers, contexts, max_length=128, beam_size=5, num_return=5):
-    all_questions = []
-    assert len(answers) == len(contexts)
-    input_texts = ["answer: %s  context: %s </s>" % (answers[i], contexts[i]) for i in range(len(answers))]
+    batch_size = len(answers)
+    assert batch_size == len(contexts)
+    input_texts = ["answer: %s  context: %s </s>" % (answers[i], contexts[i]) for i in range(batch_size)]
     features = qg_tokenizer(input_texts, return_tensors='pt').to(device)
 
     beam_outputs = qg_model.generate(input_ids=features['input_ids'], attention_mask=features['attention_mask'],
                                      max_length=max_length, num_beams=beam_size, no_repeat_ngram_size=3,
                                      num_return_sequences=num_return, early_stopping=True)
 
-    for beam_output in beam_outputs:
-        all_questions.append(qg_tokenizer.decode(beam_output, skip_special_tokens=True).replace("question: ", "", 1))
+    res = []
+    cur_ind = 0
+    beam_outputs_num = beam_outputs.shape[0]
+    assert beam_outputs_num == beam_size*batch_size
+    while cur_ind < beam_outputs_num:
+        all_questions = []
+        for offset in range(beam_size):
+            beam_output = beam_outputs[cur_ind+offset]
+            all_questions.append(qg_tokenizer.decode(beam_output, skip_special_tokens=True).replace("question: ", "", 1))
+        res.append(all_questions)
+        cur_ind = cur_ind + beam_size
 
-    return all_questions
+    return res
 
 
 def get_questions_sample(answer, context, max_length=128, top_k=50, top_p=0.95, num_return=5):

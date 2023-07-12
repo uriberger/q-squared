@@ -102,6 +102,75 @@ def get_response_score(response, knowledge, gen_method, single, remove_personal)
     return avg_f1, valid_questions, valid_cands, knowledge_answers, scores
 
 
+def get_response_score_batch(responses, knowledges, gen_method, single, remove_personal, batch_size=50):
+    res = []
+
+    batch = {'cands': [], 'inds': []}
+    entries = []
+    sample_num = len(responses)
+    assert sample_num == len(knowledges)
+    for i in range(sample_num):
+        response = responses[i]
+        candidates = qg.get_answer_candidates(response)
+        for j in range(len(candidates)):
+            cand = candidates[j]
+            batch['cands'].append(cand)
+            batch['inds'].append(i)
+            if len(batch['cands']) == batch_size or (i == sample_num - 1 and j == len(candidates) - 1):
+                if gen_method == 'greedy':
+                    #questions = [qg.get_question_greedy(cand, response)]
+                    assert False # Not implemented
+                elif gen_method == 'beam':
+                    questions_lists = qg.get_questions_beam_batch(batch['cands'], [responses[k] for k in batch['inds']])
+                    entries += [(batch['cands'][k], batch['inds'][k], questions_lists[k]) for k in range(len(batch['cands']))]
+                else:
+                    #questions = qg.get_questions_sample(cand, response)
+                    assert False # Not implemented
+                batch = {'cands': [], 'inds': []}
+
+    # Re organize entires by original sample
+    org_entries = []
+    cur_org_entry = []
+    cur_ind = 0
+    for cand, ind, questions in entries:
+        if cur_ind != ind:
+            assert ind == cur_ind + 1
+            cur_ind += 1
+            org_entries.append(cur_org_entry)
+            cur_org_entry = []
+
+        cur_org_entry.append((cand, responses[ind], questions, knowledges[ind]))
+    org_entries.append(cur_org_entry)
+        
+    for cand, response, questions, knowledge in org_entries:
+        num_questions = 0
+        f1 = 0
+        valid_questions = []
+        valid_cands = []
+        knowledge_answers = []
+        scores = []
+        for question in questions:
+            if not remove_personal or non_personal(question):
+                question_score, knowledge_ans = single_question_score(question, cand, response, knowledge)
+                if question_score != INVALID_QUESTION:
+                    num_questions += 1
+                    f1 += question_score
+
+                    valid_questions.append(question)
+                    valid_cands.append(cand)
+                    knowledge_answers.append(knowledge_ans)
+                    scores.append(question_score)
+
+                    if single:
+                        break
+        if num_questions:
+            avg_f1 = f1 / num_questions
+        else:
+            avg_f1 = INVALID_QUESTION
+        res.append((avg_f1, valid_questions, valid_cands, knowledge_answers, scores))
+    return res
+
+
 def response_questions_stats(response, knowledge, gen_method, single, remove_personal):
     num_questions = 0
     num_no_ans = 0
@@ -142,11 +211,19 @@ def get_stats(in_path, gen_method, single, remove_personal):
     print("No answer: {0}".format(num_no_ans / num_questions))
 
 
-def calc_scores(in_path, gen_method, single, remove_personal, out_path='', save_steps=False):
+def calc_scores(in_path, gen_method, single, remove_personal, out_path='', save_steps=False, batch_size=50):
     print(in_path, gen_method, single, remove_personal)
     print(save_steps, flush=True)
     q_scores = []
     df = pd.read_csv(in_path)
+
+    responses = []
+    knowledges = []
+    for idx, row in tqdm(df.iterrows()):
+        responses.append(row['response'])
+        knowledges.append(row['knowledge'])
+
+    response_scores = get_response_score_batch(responses, knowledges, gen_method, single, remove_personal, batch_size)
 
     all_questions = []
     all_cands = []
@@ -156,16 +233,14 @@ def calc_scores(in_path, gen_method, single, remove_personal, out_path='', save_
     all_knowledge = []
     ids = []
 
-    for idx, row in tqdm(df.iterrows()):
-        res, res_questions, res_cands, res_answers, res_scores =\
-            get_response_score(row['response'], row['knowledge'], gen_method, single, remove_personal)
-
+    for i in range(len(response_scores)):
+        res, res_questions, res_cands, res_answers, res_scores = response_scores[i]
         all_questions.extend(res_questions)
         all_cands.extend(res_cands)
         all_answers.extend(res_answers)
         all_scores.extend(res_scores)
-        all_responses.extend([row['response']] * len(res_questions))
-        all_knowledge.extend([row['knowledge']] * len(res_questions))
+        all_responses.extend([responses[i]] * len(res_questions))
+        all_knowledge.extend([knowledges[i]] * len(res_questions))
         ids.extend([idx] * len(res_questions))
 
         if res == INVALID_QUESTION:
@@ -173,8 +248,8 @@ def calc_scores(in_path, gen_method, single, remove_personal, out_path='', save_
             all_cands.extend([NO_VALID_QUESTIONS])
             all_answers.extend([NO_VALID_QUESTIONS])
             all_scores.extend([INVALID_QUESTION])
-            all_responses.extend([row['response'].lower()])
-            all_knowledge.extend([row['knowledge']])
+            all_responses.extend([responses[i].lower()])
+            all_knowledge.extend([knowledges[i]])
             ids.extend([idx])
 
         q_scores.append(res)
@@ -209,6 +284,8 @@ if __name__ == '__main__':
                         help="Whether to remove personal questions.")
     parser.add_argument("--outfile", type=str, default='', required=False, help="Path to an output file")
     parser.add_argument("--save_steps", default=False, action="store_true", help="Whether to save all pipeline steps")
+    parser.add_argument("--batch_size", type=int, default=50,
+                        help="Size of batch for question generation model.")
     args = parser.parse_args()
 
     if args.q_per_cand == 'single':
@@ -222,4 +299,4 @@ if __name__ == '__main__':
         rm_personal = False
 
     calc_scores(args.infile, args.gen_method, single=single_q, remove_personal=rm_personal,
-                out_path=args.outfile, save_steps=args.save_steps)
+                out_path=args.outfile, save_steps=args.save_steps, batch_size=args.batch_size)
