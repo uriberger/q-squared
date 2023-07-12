@@ -78,6 +78,21 @@ def get_questions_beam(answer, context, max_length=128, beam_size=5, num_return=
 
     return all_questions
 
+def get_questions_beam_batch(answers, contexts, max_length=128, beam_size=5, num_return=5):
+    all_questions = []
+    assert len(answers) == len(contexts)
+    input_texts = ["answer: %s  context: %s </s>" % (answers[i], contexts[i]) for i in range(len(answers))]
+    features = qg_tokenizer(input_texts, return_tensors='pt').to(device)
+
+    beam_outputs = qg_model.generate(input_ids=features['input_ids'], attention_mask=features['attention_mask'],
+                                     max_length=max_length, num_beams=beam_size, no_repeat_ngram_size=3,
+                                     num_return_sequences=num_return, early_stopping=True)
+
+    for beam_output in beam_outputs:
+        all_questions.append(qg_tokenizer.decode(beam_output, skip_special_tokens=True).replace("question: ", "", 1))
+
+    return all_questions
+
 
 def get_questions_sample(answer, context, max_length=128, top_k=50, top_p=0.95, num_return=5):
     all_questions = []
