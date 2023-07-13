@@ -82,7 +82,7 @@ def get_questions_beam_batch(answers, contexts, max_length=128, beam_size=5, num
     batch_size = len(answers)
     assert batch_size == len(contexts)
     input_texts = ["answer: %s  context: %s </s>" % (answers[i], contexts[i]) for i in range(batch_size)]
-    features = qg_tokenizer(input_texts, return_tensors='pt').to(device)
+    features = qg_tokenizer(input_texts, return_tensors='pt', padding=True).to(device)
 
     beam_outputs = qg_model.generate(input_ids=features['input_ids'], attention_mask=features['attention_mask'],
                                      max_length=max_length, num_beams=beam_size, no_repeat_ngram_size=3,
