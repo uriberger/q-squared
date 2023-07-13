@@ -141,28 +141,29 @@ def get_response_score_batch(responses, knowledges, gen_method, single, remove_p
 
         cur_org_entry.append((cand, responses[ind], questions, knowledges[ind]))
     org_entries.append(cur_org_entry)
-        
-    for cand, response, questions, knowledge in org_entries:
-        num_questions = 0
-        f1 = 0
-        valid_questions = []
-        valid_cands = []
-        knowledge_answers = []
-        scores = []
-        for question in questions:
-            if not remove_personal or non_personal(question):
-                question_score, knowledge_ans = single_question_score(question, cand, response, knowledge)
-                if question_score != INVALID_QUESTION:
-                    num_questions += 1
-                    f1 += question_score
 
-                    valid_questions.append(question)
-                    valid_cands.append(cand)
-                    knowledge_answers.append(knowledge_ans)
-                    scores.append(question_score)
+    for entry_list in org_entries:
+        for cand, response, questions, knowledge in entry_list:
+            num_questions = 0
+            f1 = 0
+            valid_questions = []
+            valid_cands = []
+            knowledge_answers = []
+            scores = []
+            for question in questions:
+                if not remove_personal or non_personal(question):
+                    question_score, knowledge_ans = single_question_score(question, cand, response, knowledge)
+                    if question_score != INVALID_QUESTION:
+                        num_questions += 1
+                        f1 += question_score
 
-                    if single:
-                        break
+                        valid_questions.append(question)
+                        valid_cands.append(cand)
+                        knowledge_answers.append(knowledge_ans)
+                        scores.append(question_score)
+
+                        if single:
+                            break
         if num_questions:
             avg_f1 = f1 / num_questions
         else:
