@@ -17,7 +17,6 @@ import argparse
 import numpy as np
 import pandas as pd
 import spacy
-import time
 
 import question_generation as qg
 import question_answering as qa
@@ -134,24 +133,19 @@ def get_response_score(response, knowledge, gen_method, single, remove_personal)
     return avg_f1, valid_questions, valid_cands, knowledge_answers, scores
 
 
-def get_response_score_batch(responses, knowledges, gen_method, single, remove_personal, batch_size=50):
-    times = {'ac': 0, 'qg': 0, 'qa': 0}
-
+def get_response_score_batch(responses, knowledges, gen_method, single, remove_personal, q_batch_size=50, a_batch_size=32):
     batch = {'cands': [], 'inds': []}
     entries = []
     sample_num = len(responses)
     assert sample_num == len(knowledges)
     for i in range(sample_num):
         response = responses[i]
-        t = time.time()
         candidates = qg.get_answer_candidates(response)
-        times['ac'] += (time.time() - t)
-        t = time.time()
         for j in range(len(candidates)):
             cand = candidates[j]
             batch['cands'].append(cand)
             batch['inds'].append(i)
-            if len(batch['cands']) == batch_size or (i == sample_num - 1 and j == len(candidates) - 1):
+            if len(batch['cands']) == q_batch_size or (i == sample_num - 1 and j == len(candidates) - 1):
                 if gen_method == 'greedy':
                     #questions = [qg.get_question_greedy(cand, response)]
                     assert False # Not implemented
@@ -162,7 +156,6 @@ def get_response_score_batch(responses, knowledges, gen_method, single, remove_p
                     #questions = qg.get_questions_sample(cand, response)
                     assert False # Not implemented
                 batch = {'cands': [], 'inds': []}
-        times['qg'] += (time.time() - t)
 
     # Re organize entires by original sample
     org_entries = []
@@ -177,10 +170,6 @@ def get_response_score_batch(responses, knowledges, gen_method, single, remove_p
 
         cur_org_entry.append((cand, responses[ind], questions, knowledges[ind]))
     org_entries.append(cur_org_entry)
-    print('[TIME] ac: ' + str(times['ac']), flush=True)
-    print('[TIME] qg: ' + str(times['qg']), flush=True)
-    print('org_entries size is ' + str(len(org_entries)) + ', sample num is ' + str(sample_num), flush=True)
-    print('entries num is ' + str(len(entries)) + ', org_entries recuresive size is ' + str(len([x for outer in org_entries for x in outer])), flush=True)
 
     batch = {'inds': []}
     ans_entries = {}
@@ -194,15 +183,13 @@ def get_response_score_batch(responses, knowledges, gen_method, single, remove_p
                 question = questions[k]
                 if not remove_personal or non_personal(question):
                     batch['inds'].append((i, j, k))
-                if len(batch['inds']) == batch_size or (i == len(org_entries) - 1 and j == len(entry_list) - 1 and k == len(questions) - 1):
-                    t = time.time()
+                if len(batch['inds']) == a_batch_size or (i == len(org_entries) - 1 and j == len(entry_list) - 1 and k == len(questions) - 1):
                     cur_res = multiple_questions_score(
                         [org_entries[batch['inds'][h][0]][batch['inds'][h][1]][2][batch['inds'][h][2]] for h in range(len(batch['inds']))],
                         [org_entries[batch['inds'][h][0]][batch['inds'][h][1]][0] for h in range(len(batch['inds']))],
                         [org_entries[batch['inds'][h][0]][batch['inds'][h][1]][1] for h in range(len(batch['inds']))],
                         [org_entries[batch['inds'][h][0]][batch['inds'][h][1]][3] for h in range(len(batch['inds']))]
                         )
-                    times['qa'] += (time.time() - t)
                     for h in range(len(batch['inds'])):
                         ind1, ind2, ind3 = batch['inds'][h]
                         ans_entries[ind1][ind2][ind3] = cur_res[h]
@@ -238,7 +225,6 @@ def get_response_score_batch(responses, knowledges, gen_method, single, remove_p
         else:
             avg_f1 = INVALID_QUESTION
         res.append((avg_f1, valid_questions, valid_cands, knowledge_answers, scores))
-    print('[TIME] qa: ' + str(times['qa']), flush=True)
     
     return res
 
@@ -283,7 +269,7 @@ def get_stats(in_path, gen_method, single, remove_personal):
     print("No answer: {0}".format(num_no_ans / num_questions))
 
 
-def calc_scores(in_path, gen_method, single, remove_personal, out_path='', save_steps=False, batch_size=50):
+def calc_scores(in_path, gen_method, single, remove_personal, out_path='', save_steps=False, q_batch_size=50, a_batch_size=32):
     print(in_path, gen_method, single, remove_personal)
     print(save_steps, flush=True)
     q_scores = []
@@ -295,7 +281,7 @@ def calc_scores(in_path, gen_method, single, remove_personal, out_path='', save_
         responses.append(row['response'])
         knowledges.append(row['knowledge'])
 
-    response_scores = get_response_score_batch(responses, knowledges, gen_method, single, remove_personal, batch_size)
+    response_scores = get_response_score_batch(responses, knowledges, gen_method, single, remove_personal, q_batch_size, a_batch_size)
 
     all_questions = []
     all_cands = []
@@ -356,8 +342,10 @@ if __name__ == '__main__':
                         help="Whether to remove personal questions.")
     parser.add_argument("--outfile", type=str, default='', required=False, help="Path to an output file")
     parser.add_argument("--save_steps", default=False, action="store_true", help="Whether to save all pipeline steps")
-    parser.add_argument("--batch_size", type=int, default=50,
+    parser.add_argument("--q_batch_size", type=int, default=50,
                         help="Size of batch for question generation model.")
+    parser.add_argument("--a_batch_size", type=int, default=32,
+                        help="Size of batch for question answering model.")
     args = parser.parse_args()
 
     if args.q_per_cand == 'single':
@@ -371,4 +359,5 @@ if __name__ == '__main__':
         rm_personal = False
 
     calc_scores(args.infile, args.gen_method, single=single_q, remove_personal=rm_personal,
-                out_path=args.outfile, save_steps=args.save_steps, batch_size=args.batch_size)
+                out_path=args.outfile, save_steps=args.save_steps, q_batch_size=args.q_batch_size,
+                a_batch_size=args.a_batch_size)
