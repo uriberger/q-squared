@@ -168,15 +168,15 @@ def get_response_score_batch(responses, knowledges, gen_method, single, remove_p
             _, _, questions, _ = entry_list[j]
             ans_entries[i][j] = {}
             for k in range(len(questions)):
-                question = question[k]
+                question = questions[k]
                 if not remove_personal or non_personal(question):
                     batch['inds'].append((i, j, k))
                 if len(batch['inds']) == batch_size or (i == len(org_entries) - 1 and j == len(entry_list) - 1 and k == len(questions) - 1):
                     cur_res = multiple_questions_score(
-                        [org_entries[batch[h]['inds'][0]][batch[h]['inds'][1]][2][batch[h]['inds'][2]] for h in range(len(batch['inds']))],
-                        [org_entries[batch[h]['inds'][0]][batch[h]['inds'][1]][0] for h in range(len(batch['inds']))],
-                        [org_entries[batch[h]['inds'][0]][batch[h]['inds'][1]][1] for h in range(len(batch['inds']))],
-                        [org_entries[batch[h]['inds'][0]][batch[h]['inds'][1]][3] for h in range(len(batch['inds']))]
+                        [org_entries[batch['inds'][h][0]][batch['inds'][h][1]][2][batch['inds'][h][2]] for h in range(len(batch['inds']))],
+                        [org_entries[batch['inds'][h][0]][batch['inds'][h][1]][0] for h in range(len(batch['inds']))],
+                        [org_entries[batch['inds'][h][0]][batch['inds'][h][1]][1] for h in range(len(batch['inds']))],
+                        [org_entries[batch['inds'][h][0]][batch['inds'][h][1]][3] for h in range(len(batch['inds']))]
                         )
                     for h in range(len(batch['inds'])):
                         ind1, ind2, ind3 = batch['inds'][h]
