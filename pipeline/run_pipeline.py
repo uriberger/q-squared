@@ -65,14 +65,24 @@ def single_question_score(question, cand, response, knowledge):
 def multiple_questions_score(questions, cands, responses, knowledges):
     pred_answers = qa.get_answer_batch(questions, responses)
 
-    res = []
+    is_valid = []
     for i in range(len(questions)):
         cand = cands[i]
         pred_ans = pred_answers[i]
-        question = questions[i]
-        knowledge = knowledges[i]
         if filter_questions(cand, pred_ans) == 'VALID':
-            knowledge_ans = qa.get_answer(question, knowledge)
+            is_valid.append(True)
+        else:
+            is_valid.append(False)
+
+    valid_questions = [questions[i] for i in range(len(questions)) if is_valid[i]]
+    valid_knowledges = [knowledges[i] for i in range(len(questions)) if is_valid[i]]
+    knowledge_answers = qa.get_answer_batch(valid_questions, valid_knowledges)
+
+    res = []
+    for i in range(len(questions)):
+        cand = cands[i]
+        if is_valid[i]:
+            knowledge_ans = knowledge_answers[i]
             if knowledge_ans != NO_ANS:
                 res.append((f1_score(cand, knowledge_ans), knowledge_ans))
             else:
