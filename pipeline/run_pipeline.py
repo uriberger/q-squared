@@ -62,6 +62,25 @@ def single_question_score(question, cand, response, knowledge):
     else:
         return INVALID_QUESTION, INVALID_QUESTION
 
+def multiple_questions_score(questions, cands, responses, knowledges):
+    pred_answers = qa.get_answer_batch(questions, responses)
+
+    res = []
+    for i in range(len(questions)):
+        cand = cands[i]
+        pred_ans = pred_answers[i]
+        question = questions[i]
+        knowledge = knowledges[i]
+        if filter_questions(cand, pred_ans) == 'VALID':
+            knowledge_ans = qa.get_answer(question, knowledge)
+            if knowledge_ans != NO_ANS:
+                res.append((f1_score(cand, knowledge_ans), knowledge_ans))
+            else:
+                res.append((0, NO_ANS))
+        else:
+            res.append((INVALID_QUESTION, INVALID_QUESTION))
+
+    return res
 
 def get_response_score(response, knowledge, gen_method, single, remove_personal):
     f1 = 0
@@ -103,8 +122,6 @@ def get_response_score(response, knowledge, gen_method, single, remove_personal)
 
 
 def get_response_score_batch(responses, knowledges, gen_method, single, remove_personal, batch_size=50):
-    res = []
-
     batch = {'cands': [], 'inds': []}
     entries = []
     sample_num = len(responses)
@@ -142,17 +159,44 @@ def get_response_score_batch(responses, knowledges, gen_method, single, remove_p
         cur_org_entry.append((cand, responses[ind], questions, knowledges[ind]))
     org_entries.append(cur_org_entry)
 
-    for entry_list in org_entries:
-        for cand, response, questions, knowledge in entry_list:
+    batch = {'inds': []}
+    ans_entries = {}
+    for i in range(len(org_entries)):
+        entry_list = org_entries[i]
+        ans_entries[i] = {}
+        for j in range(len(entry_list)):
+            _, _, questions, _ = entry_list[j]
+            ans_entries[i][j] = {}
+            for k in range(len(questions)):
+                question = question[k]
+                if not remove_personal or non_personal(question):
+                    batch['inds'].append((i, j, k))
+                if len(batch['inds']) == batch_size or (i == len(org_entries) - 1 and j == len(entry_list) - 1 and k == len(questions) - 1):
+                    cur_res = multiple_questions_score(
+                        [org_entries[batch[h]['inds'][0]][batch[h]['inds'][1]][2][batch[h]['inds'][2]] for h in range(len(batch['inds']))],
+                        [org_entries[batch[h]['inds'][0]][batch[h]['inds'][1]][0] for h in range(len(batch['inds']))],
+                        [org_entries[batch[h]['inds'][0]][batch[h]['inds'][1]][1] for h in range(len(batch['inds']))],
+                        [org_entries[batch[h]['inds'][0]][batch[h]['inds'][1]][3] for h in range(len(batch['inds']))]
+                        )
+                    for h in range(len(batch['inds'])):
+                        ind1, ind2, ind3 = batch['inds'][h]
+                        ans_entries[ind1][ind2][ind3] = cur_res[h]
+                    batch = {'inds': []}
+
+    res = []
+    for i in range(len(org_entries)):
+        entry_list = org_entries[i]
+        for j in range(len(entry_list)):
+            cand, response, questions, knowledge = entry_list[j]
             num_questions = 0
             f1 = 0
             valid_questions = []
             valid_cands = []
             knowledge_answers = []
             scores = []
-            for question in questions:
-                if not remove_personal or non_personal(question):
-                    question_score, knowledge_ans = single_question_score(question, cand, response, knowledge)
+            for k in range(len(questions)):
+                if k in ans_entries[i][j]:
+                    question_score, knowledge_ans = ans_entries[i][j][k]
                     if question_score != INVALID_QUESTION:
                         num_questions += 1
                         f1 += question_score
@@ -169,6 +213,7 @@ def get_response_score_batch(responses, knowledges, gen_method, single, remove_p
         else:
             avg_f1 = INVALID_QUESTION
         res.append((avg_f1, valid_questions, valid_cands, knowledge_answers, scores))
+    
     return res
 
 
