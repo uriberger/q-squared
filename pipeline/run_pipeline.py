@@ -17,6 +17,7 @@ import argparse
 import numpy as np
 import pandas as pd
 import spacy
+import time
 
 import question_generation as qg
 import question_answering as qa
@@ -76,13 +77,15 @@ def multiple_questions_score(questions, cands, responses, knowledges):
 
     valid_questions = [questions[i] for i in range(len(questions)) if is_valid[i]]
     valid_knowledges = [knowledges[i] for i in range(len(questions)) if is_valid[i]]
+    valid_ids = [i for i in range(len(questions)) if is_valid[i]]
+    id_to_new_id = {valid_ids[i]: i for i in range(len(valid_ids))}
     knowledge_answers = qa.get_answer_batch(valid_questions, valid_knowledges)
 
     res = []
     for i in range(len(questions)):
         cand = cands[i]
         if is_valid[i]:
-            knowledge_ans = knowledge_answers[i]
+            knowledge_ans = knowledge_answers[id_to_new_id[i]]
             if knowledge_ans != NO_ANS:
                 res.append((f1_score(cand, knowledge_ans), knowledge_ans))
             else:
@@ -132,13 +135,18 @@ def get_response_score(response, knowledge, gen_method, single, remove_personal)
 
 
 def get_response_score_batch(responses, knowledges, gen_method, single, remove_personal, batch_size=50):
+    times = {'ac': 0, 'qg': 0, 'qa': 0}
+
     batch = {'cands': [], 'inds': []}
     entries = []
     sample_num = len(responses)
     assert sample_num == len(knowledges)
     for i in range(sample_num):
         response = responses[i]
+        t = time.time()
         candidates = qg.get_answer_candidates(response)
+        times['ac'] += (time.time() - t)
+        t = time.time()
         for j in range(len(candidates)):
             cand = candidates[j]
             batch['cands'].append(cand)
@@ -154,6 +162,7 @@ def get_response_score_batch(responses, knowledges, gen_method, single, remove_p
                     #questions = qg.get_questions_sample(cand, response)
                     assert False # Not implemented
                 batch = {'cands': [], 'inds': []}
+        times['qg'] += (time.time() - t)
 
     # Re organize entires by original sample
     org_entries = []
@@ -168,6 +177,10 @@ def get_response_score_batch(responses, knowledges, gen_method, single, remove_p
 
         cur_org_entry.append((cand, responses[ind], questions, knowledges[ind]))
     org_entries.append(cur_org_entry)
+    print('[TIME] ac: ' + str(times['ac']), flush=True)
+    print('[TIME] qg: ' + str(times['qg']), flush=True)
+    print('org_entries size is ' + str(len(org_entries)) + ', sample num is ' + str(sample_num), flush=True)
+    print('entries num is ' + str(len(entries)) + ', org_entries recuresive size is ' + str(len([x for outer in org_entries for x in outer])), flush=True)
 
     batch = {'inds': []}
     ans_entries = {}
@@ -182,12 +195,14 @@ def get_response_score_batch(responses, knowledges, gen_method, single, remove_p
                 if not remove_personal or non_personal(question):
                     batch['inds'].append((i, j, k))
                 if len(batch['inds']) == batch_size or (i == len(org_entries) - 1 and j == len(entry_list) - 1 and k == len(questions) - 1):
+                    t = time.time()
                     cur_res = multiple_questions_score(
                         [org_entries[batch['inds'][h][0]][batch['inds'][h][1]][2][batch['inds'][h][2]] for h in range(len(batch['inds']))],
                         [org_entries[batch['inds'][h][0]][batch['inds'][h][1]][0] for h in range(len(batch['inds']))],
                         [org_entries[batch['inds'][h][0]][batch['inds'][h][1]][1] for h in range(len(batch['inds']))],
                         [org_entries[batch['inds'][h][0]][batch['inds'][h][1]][3] for h in range(len(batch['inds']))]
                         )
+                    times['qa'] += (time.time() - t)
                     for h in range(len(batch['inds'])):
                         ind1, ind2, ind3 = batch['inds'][h]
                         ans_entries[ind1][ind2][ind3] = cur_res[h]
@@ -223,6 +238,7 @@ def get_response_score_batch(responses, knowledges, gen_method, single, remove_p
         else:
             avg_f1 = INVALID_QUESTION
         res.append((avg_f1, valid_questions, valid_cands, knowledge_answers, scores))
+    print('[TIME] qa: ' + str(times['qa']), flush=True)
     
     return res
 
