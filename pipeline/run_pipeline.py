@@ -133,7 +133,7 @@ def get_response_score(response, knowledge, gen_method, single, remove_personal)
     return avg_f1, valid_questions, valid_cands, knowledge_answers, scores
 
 
-def get_response_score_batch(responses, knowledges, gen_method, single, remove_personal, q_batch_size=50, a_batch_size=32):
+def get_response_score_batch(responses, knowledges, gen_method, single, remove_personal, q_batch_size=50, a_batch_size=8):
     batch = {'cands': [], 'inds': []}
     entries = []
     sample_num = len(responses)
@@ -269,7 +269,7 @@ def get_stats(in_path, gen_method, single, remove_personal):
     print("No answer: {0}".format(num_no_ans / num_questions))
 
 
-def calc_scores(in_path, gen_method, single, remove_personal, out_path='', save_steps=False, q_batch_size=50, a_batch_size=32):
+def calc_scores(in_path, gen_method, single, remove_personal, out_path='', save_steps=False, q_batch_size=50, a_batch_size=8):
     print(in_path, gen_method, single, remove_personal)
     print(save_steps, flush=True)
     q_scores = []
@@ -344,7 +344,7 @@ if __name__ == '__main__':
     parser.add_argument("--save_steps", default=False, action="store_true", help="Whether to save all pipeline steps")
     parser.add_argument("--q_batch_size", type=int, default=50,
                         help="Size of batch for question generation model.")
-    parser.add_argument("--a_batch_size", type=int, default=32,
+    parser.add_argument("--a_batch_size", type=int, default=8,
                         help="Size of batch for question answering model.")
     args = parser.parse_args()
 
