@@ -46,15 +46,13 @@ def get_answer_batch(questions, texts):
 
     answer_start_scores, answer_end_scores = qa_model(**inputs, return_dict=False)
 
-    answers = []
-    for i in range(sample_num):
-        answer_start = torch.argmax(
-            answer_start_scores[i]
-        )  # Get the most likely beginning of answer with the argmax of the score
-        answer_end = torch.argmax(answer_end_scores[i]) + 1  # Get the most likely end of answer with the argmax of the score
+    answer_starts = torch.argmax(
+        answer_start_scores, dim=1
+    )  # Get the most likely beginning of answer with the argmax of the score
+    answer_ends = torch.argmax(answer_end_scores, dim=1) + 1  # Get the most likely end of answer with the argmax of the score
 
-        ans = qa_tokenizer.convert_tokens_to_string(qa_tokenizer.convert_ids_to_tokens(input_ids[i][answer_start:answer_end]))
-        answers.append(ans)
+    answers = qa_tokenizer.batch_decode([input_ids[i][answer_starts[i]:answer_ends[i]] for i in range(sample_num)])
+    
     return answers
 
 # model_name = "ktrapeznikov/albert-xlarge-v2-squad-v2"
