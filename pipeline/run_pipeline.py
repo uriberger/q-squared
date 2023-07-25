@@ -78,6 +78,8 @@ def multiple_questions_score(questions, cands, responses, knowledges):
     valid_knowledges = [knowledges[i] for i in range(len(questions)) if is_valid[i]]
     valid_ids = [i for i in range(len(questions)) if is_valid[i]]
     id_to_new_id = {valid_ids[i]: i for i in range(len(valid_ids))}
+    if len(valid_questions) == 0:
+        return [(INVALID_QUESTION, INVALID_QUESTION)]*(len(questions))
     knowledge_answers = qa.get_answer_batch(valid_questions, valid_knowledges)
 
     res = []
