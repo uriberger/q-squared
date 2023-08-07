@@ -15,6 +15,7 @@
 import argparse
 
 import numpy as np
+import random
 import pandas as pd
 
 from allennlp.predictors.predictor import Predictor
@@ -98,6 +99,19 @@ def scores_with_nli(in_path):
             f1_scores.append(f1_score)
 
         nli_scores.append(nli_score)
+
+    max_q2_val = max(nli_scores)
+    max_q2_inds = [i for i in range(len(nli_scores)) if nli_scores[i] == max_q2_val]
+    chosen_ind_by_q2 = random.choice(max_q2_inds)
+
+    max_q2_no_nli_val = max(f1_scores)
+    max_q2_no_nli_inds = [i for i in range(len(f1_scores)) if f1_scores[i] == max_q2_no_nli_val]
+    chosen_ind_by_q2_no_nli = random.choice(max_q2_no_nli_inds)
+
+    print(f'[RES] Q2: {chosen_ind_by_q2}')
+    print(f'Chosen randomly out of {len(max_q2_inds)} options')
+    print(f'[RES] Q2 no nli: {chosen_ind_by_q2_no_nli}')
+    print(f'Chosen randomly out of {len(max_q2_no_nli_inds)} options')
 
     df['q2_score'] = nli_scores
     df['q2_no_nli'] = f1_scores
